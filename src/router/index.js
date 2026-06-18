@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
+import { usePasswordStore } from '@/stores/password'
 import { supabase } from '@/utils/supabase'
 
 const routes = [
@@ -62,11 +63,17 @@ let isInitialized = false
 
 router.beforeEach(async (to, from, next) => {
   const settingsStore = useSettingsStore()
+  const passwordStore = usePasswordStore()
 
   if (!isInitialized) {
     isInitialized = true
     try {
-      await settingsStore.checkSession()
+      const result = await settingsStore.checkSession()
+      if (result.hasSession && result.user) {
+        // 恢复 userId，加载密码数据
+        passwordStore.setUserId(result.user.id)
+        await passwordStore.loadAll()
+      }
     } catch (error) {
       console.warn('初始化会话失败:', error)
     }

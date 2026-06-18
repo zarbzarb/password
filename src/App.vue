@@ -46,4 +46,11 @@ body {
   width: 0;
   height: 0;
 }
+
+.van-search,
+.van-search__content,
+.van-cell,
+.van-field {
+  box-shadow: none !important;
+}
 </style>

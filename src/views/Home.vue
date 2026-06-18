@@ -206,6 +206,16 @@ async function handleLogout() {
   background: #fff;
 }
 
+.search-bar :deep(.van-search) {
+  box-shadow: none;
+  border: none;
+}
+
+.search-bar :deep(.van-search__content) {
+  box-shadow: none;
+  border: none;
+}
+
 .category-tabs {
   display: flex;
   gap: 8px;
