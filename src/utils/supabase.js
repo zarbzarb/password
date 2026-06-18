@@ -57,16 +57,16 @@ export async function getProfile(userId) {
 }
 
 export async function ensureProfile(userId, email) {
-  const profile = await getProfile(userId)
+  let profile = await getProfile(userId)
   if (profile) return profile
 
   const { data, error } = await supabase
     .from('profiles')
-    .insert({
+    .upsert({
       id: userId,
       email: email,
       master_password_hash: ''
-    })
+    }, { onConflict: 'id' })
     .select()
     .single()
   if (error) throw error
