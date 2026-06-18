@@ -1,51 +1,140 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { hashPassword, generateSessionToken } from '@/utils/crypto'
-import { saveSettings, loadSettings, clearAllData, savePasswords, loadPasswords } from '@/utils/storage'
+import { hashPassword } from '@/utils/crypto'
+import { 
+  signUp, 
+  signIn, 
+  signOut, 
+  getCurrentUser,
+  getProfile,
+  updateProfile,
+  createProfile,
+  getSettings,
+  updateSettings,
+  createSettings
+} from '@/utils/supabase'
 
 const SESSION_KEY = 'password_manager_session'
 
 export const useSettingsStore = defineStore('settings', () => {
-  const masterPasswordHash = ref('')
-  const categories = ref(['社交', '工作', '金融', '购物'])
+  const categories = ref(['社交', '工作', '金融', '购物', '学习', '开发', '其他'])
   const autoLockTime = ref(5)
   const isLoggedIn = ref(false)
+  const user = ref(null)
+  const masterPasswordHash = ref('')
+  const loading = ref(false)
 
-  function load() {
-    const stored = loadSettings()
-    if (stored) {
-      masterPasswordHash.value = stored.masterPasswordHash || ''
-      categories.value = stored.categories || ['社交', '工作', '金融', '购物']
-      autoLockTime.value = stored.autoLockTime || 5
+  async function register(email, password, masterPassword) {
+    loading.value = true
+    try {
+      // 注册 Supabase 用户
+      const data = await signUp(email, password)
+      if (data.user) {
+        user.value = data.user
+        
+        // 创建用户配置（存储主密码哈希）
+        const hashedMasterPassword = hashPassword(masterPassword)
+        await createProfile(data.user.id, email, hashedMasterPassword)
+        masterPasswordHash.value = hashedMasterPassword
+        
+        // 创建用户设置
+        await createSettings(data.user.id)
+        
+        isLoggedIn.value = true
+        saveSession(masterPassword)
+        return { success: true, user: data.user }
+      }
+      return { success: false, error: '注册失败' }
+    } catch (error) {
+      console.error('注册失败:', error)
+      return { success: false, error: error.message }
+    } finally {
+      loading.value = false
     }
   }
 
-  function save() {
-    saveSettings({
-      masterPasswordHash: masterPasswordHash.value,
-      categories: categories.value,
-      autoLockTime: autoLockTime.value
-    })
+  async function login(email, password, masterPassword) {
+    loading.value = true
+    try {
+      // 登录 Supabase
+      const data = await signIn(email, password)
+      if (data.user) {
+        user.value = data.user
+        
+        // 获取用户配置并验证主密码
+        const profile = await getProfile(data.user.id)
+        if (profile) {
+          const hashedMasterPassword = hashPassword(masterPassword)
+          if (profile.master_password_hash !== hashedMasterPassword) {
+            await signOut()
+            user.value = null
+            return { success: false, error: '主密码错误' }
+          }
+          masterPasswordHash.value = profile.master_password_hash
+        }
+        
+        // 获取用户设置
+        const settings = await getSettings(data.user.id)
+        if (settings) {
+          categories.value = settings.categories || categories.value
+          autoLockTime.value = settings.auto_lock_time || 5
+        }
+        
+        isLoggedIn.value = true
+        saveSession(masterPassword)
+        return { success: true, user: data.user }
+      }
+      return { success: false, error: '登录失败' }
+    } catch (error) {
+      console.error('登录失败:', error)
+      return { success: false, error: error.message }
+    } finally {
+      loading.value = false
+    }
   }
 
-  function setMasterPassword(password) {
-    masterPasswordHash.value = hashPassword(password)
-    isLoggedIn.value = true
-    save()
-    saveSession(password)
+  async function checkSession() {
+    try {
+      const currentUser = await getCurrentUser()
+      if (currentUser) {
+        user.value = currentUser
+        
+        // 获取用户设置
+        const settings = await getSettings(currentUser.id)
+        if (settings) {
+          categories.value = settings.categories || categories.value
+          autoLockTime.value = settings.auto_lock_time || 5
+        }
+        
+        // 检查本地会话
+        const localSession = getSession()
+        if (localSession) {
+          isLoggedIn.value = true
+          return { hasSession: true, user: currentUser }
+        }
+      }
+      return { hasSession: false }
+    } catch (error) {
+      console.error('检查会话失败:', error)
+      return { hasSession: false }
+    }
   }
 
-  function verifyMasterPassword(password) {
-    return hashPassword(password) === masterPasswordHash.value
+  async function logout() {
+    try {
+      await signOut()
+      user.value = null
+      isLoggedIn.value = false
+      clearSession()
+      masterPasswordHash.value = ''
+    } catch (error) {
+      console.error('退出登录失败:', error)
+    }
   }
 
-  function hasMasterPassword() {
-    return !!masterPasswordHash.value
-  }
-
-  function saveSession(password) {
+  function saveSession(masterPassword) {
     const session = {
-      token: generateSessionToken(password),
+      masterPassword,
       timestamp: Date.now()
     }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
@@ -60,9 +149,11 @@ export const useSettingsStore = defineStore('settings', () => {
         const maxAge = autoLockTime.value * 60 * 1000
         if (age < maxAge) {
           return data
+        } else {
+          clearSession()
         }
       }
-    } catch (e) {
+    } catch {
       return null
     }
     return null
@@ -72,35 +163,52 @@ export const useSettingsStore = defineStore('settings', () => {
     sessionStorage.removeItem(SESSION_KEY)
   }
 
-  function logout() {
-    isLoggedIn.value = false
-    clearSession()
-  }
-
-  function addCategory(name) {
+  async function addCategory(name) {
     if (!categories.value.includes(name)) {
       categories.value.push(name)
-      save()
+      await saveSettings()
     }
   }
 
-  function removeCategory(name) {
+  async function removeCategory(name) {
     categories.value = categories.value.filter(c => c !== name)
-    save()
+    await saveSettings()
   }
 
-  function setAutoLockTime(time) {
+  async function setAutoLockTime(time) {
     autoLockTime.value = time
-    save()
+    await saveSettings()
   }
 
-  function clearData() {
-    clearAllData()
-    clearSession()
-    masterPasswordHash.value = ''
-    categories.value = ['社交', '工作', '金融', '购物']
-    autoLockTime.value = 5
-    isLoggedIn.value = false
+  async function saveSettings() {
+    if (user.value) {
+      try {
+        await updateSettings(user.value.id, {
+          categories: categories.value,
+          auto_lock_time: autoLockTime.value
+        })
+      } catch (error) {
+        console.error('保存设置失败:', error)
+      }
+    }
+  }
+
+  async function updateMasterPassword(newMasterPassword) {
+    if (user.value) {
+      try {
+        const hashedMasterPassword = hashPassword(newMasterPassword)
+        await updateProfile(user.value.id, {
+          master_password_hash: hashedMasterPassword
+        })
+        masterPasswordHash.value = hashedMasterPassword
+        saveSession(newMasterPassword)
+        return { success: true }
+      } catch (error) {
+        console.error('更新主密码失败:', error)
+        return { success: false, error: error.message }
+      }
+    }
+    return { success: false, error: '用户未登录' }
   }
 
   function exportDataFile(format = 'json', passwordItems = []) {
@@ -181,7 +289,7 @@ export const useSettingsStore = defineStore('settings', () => {
         escapeCsv(item.url || ''),
         escapeCsv(item.category || ''),
         escapeCsv(item.notes || ''),
-        escapeCsv(item.createdAt || '')
+        escapeCsv(item.created_at || '')
       ]
       content += row.join(',') + '\n'
     })
@@ -205,7 +313,7 @@ export const useSettingsStore = defineStore('settings', () => {
     URL.revokeObjectURL(url)
   }
 
-  async function importDataFile(file, masterPassword) {
+  async function importDataFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => {
@@ -249,8 +357,8 @@ export const useSettingsStore = defineStore('settings', () => {
         password: getValue(header, values, 'password') || values[3] || '',
         category: '导入',
         notes: getValue(header, values, 'note') || values[4] || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
       items.push(item)
     }
@@ -294,23 +402,24 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    masterPasswordHash,
     categories,
     autoLockTime,
     isLoggedIn,
-    load,
-    save,
-    setMasterPassword,
-    verifyMasterPassword,
-    hasMasterPassword,
+    user,
+    masterPasswordHash,
+    loading,
+    register,
+    login,
+    checkSession,
+    logout,
     saveSession,
     getSession,
     clearSession,
-    logout,
     addCategory,
     removeCategory,
     setAutoLockTime,
-    clearData,
+    saveSettings,
+    updateMasterPassword,
     exportDataFile,
     importDataFile
   }
