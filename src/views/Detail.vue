@@ -17,10 +17,10 @@
 
     <div v-if="item" class="detail-content">
       <div class="website-header">
-        <div class="website-icon">{{ item.website.charAt(0).toUpperCase() }}</div>
+        <div class="website-icon">{{ (item.website || '?').charAt(0).toUpperCase() }}</div>
         <div class="website-info">
           <h2>{{ item.website }}</h2>
-          <span class="category-tag">{{ item.category }}</span>
+          <span class="category-tag">{{ item.category || '其他' }}</span>
         </div>
       </div>
 

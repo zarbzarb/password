@@ -162,9 +162,10 @@
       <div class="modal-content about" @click.stop>
         <div class="modal-title">关于</div>
         <p>密码管理器 v1.0.0</p>
-        <p>安全的本地密码管理工具</p>
-        <p>数据仅存储在本地浏览器</p>
+        <p>安全的云端密码管理工具</p>
+        <p>数据存储在 Supabase 云端</p>
         <p>采用 AES-256 加密保护</p>
+        <p>支持多设备同步</p>
       </div>
     </div>
   </div>
@@ -245,19 +246,23 @@ async function handleImport(file) {
   }
 }
 
-function confirmImport() {
+async function confirmImport() {
   showImportPreview.value = false
 
-  importItems.value.forEach(item => {
-    passwordStore.addItem({
-      website: item.website,
-      url: item.url,
-      username: item.username,
-      password: item.password,
-      category: item.category || '导入',
-      notes: item.notes || ''
-    })
-  })
+  for (const item of importItems.value) {
+    try {
+      await passwordStore.addItem({
+        website: item.website,
+        url: item.url,
+        username: item.username,
+        password: item.password,
+        category: item.category || '导入',
+        notes: item.notes || ''
+      })
+    } catch (e) {
+      console.error('导入失败:', e)
+    }
+  }
 
   showToast(`已导入 ${importItems.value.length} 条记录`)
   importItems.value = []

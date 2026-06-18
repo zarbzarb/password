@@ -185,7 +185,9 @@ const strengthPercent = computed(() => {
 })
 
 onMounted(() => {
-  settingsStore.load()
+  if (settingsStore.categories.length === 0) {
+    settingsStore.categories = ['社交', '工作', '金融', '购物']
+  }
   const storedPassword = sessionStorage.getItem('generatedPassword')
   if (storedPassword) {
     form.value.password = storedPassword

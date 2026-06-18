@@ -73,12 +73,12 @@
         class="password-item"
         @click="goToDetail(item.id)"
       >
-        <div class="item-icon">{{ item.website.charAt(0).toUpperCase() }}</div>
+        <div class="item-icon">{{ (item.website || '?').charAt(0).toUpperCase() }}</div>
         <div class="item-content">
           <div class="item-name">{{ item.website }}</div>
           <div class="item-account">{{ item.username }}</div>
         </div>
-        <div class="item-category">{{ item.category }}</div>
+        <div class="item-category">{{ item.category || '其他' }}</div>
       </div>
     </div>
 
@@ -156,9 +156,11 @@ onUnmounted(() => {
 })
 
 function handleAutoLock() {
-  settingsStore.logout()
   passwordStore.items = []
   passwordStore.masterPassword = ''
+  passwordStore.userId = ''
+  settingsStore.clearSession()
+  settingsStore.isLoggedIn = false
   router.push('/')
   showToast('已自动锁定')
 }
@@ -194,9 +196,11 @@ async function handleLogout() {
     message: '确定要锁定密码管理器吗？'
   })
   if (result) {
-    settingsStore.logout()
     passwordStore.items = []
     passwordStore.masterPassword = ''
+    passwordStore.userId = ''
+    settingsStore.clearSession()
+    settingsStore.isLoggedIn = false
     router.push('/')
     showToast('已锁定')
   }

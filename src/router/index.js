@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
+import { supabase } from '@/utils/supabase'
 
 const routes = [
   {
@@ -51,9 +52,28 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+// 全局初始化标志
+let isInitialized = false
+
+router.beforeEach(async (to, from, next) => {
   const settingsStore = useSettingsStore()
-  
+
+  // 首次导航时初始化 Supabase 会话
+  if (!isInitialized) {
+    isInitialized = true
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const result = await settingsStore.checkSession()
+        if (result.hasSession) {
+          settingsStore.isLoggedIn = true
+        }
+      }
+    } catch (error) {
+      console.error('初始化会话失败:', error)
+    }
+  }
+
   if (to.meta.requiresAuth && !settingsStore.isLoggedIn) {
     next('/')
   } else if (to.path === '/' && settingsStore.isLoggedIn) {
