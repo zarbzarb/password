@@ -51,6 +51,23 @@ export async function getProfile(userId) {
     .from('profiles')
     .select('*')
     .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function ensureProfile(userId, email) {
+  const profile = await getProfile(userId)
+  if (profile) return profile
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert({
+      id: userId,
+      email: email,
+      master_password_hash: ''
+    })
+    .select()
     .single()
   if (error) throw error
   return data

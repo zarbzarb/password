@@ -8,10 +8,9 @@ import {
   getCurrentUser,
   getProfile,
   updateProfile,
-  createProfile,
+  ensureProfile,
   getSettings,
-  updateSettings,
-  createSettings
+  updateSettings
 } from '@/utils/supabase'
 
 const SESSION_KEY = 'password_manager_session'
@@ -61,14 +60,13 @@ export const useSettingsStore = defineStore('settings', () => {
   async function login(email, password, masterPassword) {
     loading.value = true
     try {
-      // 登录 Supabase
       const data = await signIn(email, password)
       if (data.user) {
         user.value = data.user
         
-        // 获取用户配置并验证主密码
-        const profile = await getProfile(data.user.id)
-        if (profile) {
+        const profile = await ensureProfile(data.user.id, email)
+        
+        if (profile && profile.master_password_hash) {
           const hashedMasterPassword = hashPassword(masterPassword)
           if (profile.master_password_hash !== hashedMasterPassword) {
             await signOut()
@@ -76,6 +74,12 @@ export const useSettingsStore = defineStore('settings', () => {
             return { success: false, error: '主密码错误' }
           }
           masterPasswordHash.value = profile.master_password_hash
+        } else {
+          const hashedMasterPassword = hashPassword(masterPassword)
+          await updateProfile(data.user.id, {
+            master_password_hash: hashedMasterPassword
+          })
+          masterPasswordHash.value = hashedMasterPassword
         }
         
         // 获取用户设置
