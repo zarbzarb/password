@@ -207,13 +207,27 @@ async function handleLogout() {
 }
 
 .search-bar :deep(.van-search) {
+  background: #1a1a1a !important;
   box-shadow: none;
   border: none;
 }
 
 .search-bar :deep(.van-search__content) {
+  background: #333 !important;
   box-shadow: none;
   border: none;
+}
+
+.search-bar :deep(.van-search__input) {
+  color: #fff !important;
+}
+
+.search-bar :deep(.van-search__input::placeholder) {
+  color: #999 !important;
+}
+
+.search-bar :deep(.van-icon-search) {
+  color: #fff !important;
 }
 
 .category-tabs {
@@ -226,17 +240,18 @@ async function handleLogout() {
 
 .category-tab {
   padding: 6px 14px;
-  background: #f5f5f5;
+  background: #1a1a1a;
+  color: #fff;
   border-radius: 16px;
   font-size: 13px;
-  color: #666;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .category-tab.active {
-  background: #1a1a1a;
-  color: #fff;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #1a1a1a;
 }
 
 .password-list {
