@@ -66,21 +66,24 @@ export const useSettingsStore = defineStore('settings', () => {
         
         const profile = await ensureProfile(data.user.id, email)
         
-        if (profile && profile.master_password_hash) {
-          const hashedMasterPassword = hashPassword(masterPassword)
+        const hashedMasterPassword = hashPassword(masterPassword)
+        
+        if (profile && profile.master_password_hash && profile.master_password_hash.length > 0) {
           if (profile.master_password_hash !== hashedMasterPassword) {
             await signOut()
             user.value = null
-            return { success: false, error: '主密码错误' }
+            return { 
+              success: false, 
+              error: '主密码错误',
+              hint: '如忘记主密码，请在 Supabase profiles 表中清空 master_password_hash 字段后重新登录'
+            }
           }
-          masterPasswordHash.value = profile.master_password_hash
         } else {
-          const hashedMasterPassword = hashPassword(masterPassword)
           await updateProfile(data.user.id, {
             master_password_hash: hashedMasterPassword
           })
-          masterPasswordHash.value = hashedMasterPassword
         }
+        masterPasswordHash.value = hashedMasterPassword
         
         // 获取用户设置
         const settings = await getSettings(data.user.id)
