@@ -8,12 +8,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
+    "@supabase/supabase-js": "^2.108.2",
     "crypto-js": "^4.2.0",
     "pinia": "^2.1.7",
+    "vant": "^4.8.1",
     "vue": "^3.4.21",
-    "vue-router": "^4.3.0",
-    "vant": "^4.8.1"
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
