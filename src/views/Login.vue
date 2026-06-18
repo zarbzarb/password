@@ -144,18 +144,20 @@ const loading = ref(false)
 const hasSession = ref(false)
 
 onMounted(async () => {
-  // 检查是否有已存在的会话
-  const result = await settingsStore.checkSession()
-  if (result.hasSession) {
-    hasSession.value = true
-    // 如果有会话，直接跳转
-    const session = settingsStore.getSession()
-    if (session) {
-      passwordStore.setMasterPassword(session.masterPassword)
-      passwordStore.setUserId(result.user.id)
-      await passwordStore.loadAll()
-      router.push('/home')
+  try {
+    const result = await settingsStore.checkSession()
+    if (result.hasSession) {
+      hasSession.value = true
+      const session = settingsStore.getSession()
+      if (session) {
+        passwordStore.setMasterPassword(session.masterPassword)
+        passwordStore.setUserId(result.user.id)
+        await passwordStore.loadAll()
+        router.push('/home')
+      }
     }
+  } catch (e) {
+    console.warn('初始化会话检查失败:', e)
   }
 })
 

@@ -99,14 +99,12 @@ export const useSettingsStore = defineStore('settings', () => {
       if (currentUser) {
         user.value = currentUser
         
-        // 获取用户设置
         const settings = await getSettings(currentUser.id)
         if (settings) {
           categories.value = settings.categories || categories.value
           autoLockTime.value = settings.auto_lock_time || 5
         }
         
-        // 检查本地会话
         const localSession = getSession()
         if (localSession) {
           isLoggedIn.value = true
@@ -115,7 +113,7 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       return { hasSession: false }
     } catch (error) {
-      console.error('检查会话失败:', error)
+      console.warn('检查会话失败:', error)
       return { hasSession: false }
     }
   }
