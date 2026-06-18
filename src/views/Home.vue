@@ -14,7 +14,8 @@
         v-model="searchQuery"
         placeholder="搜索密码"
         shape="round"
-        background="#f5f5f5"
+        background="transparent"
+        :input-background="'#f5f5f5'"
         @update:model-value="handleSearch"
       />
     </div>
@@ -203,31 +204,20 @@ async function handleLogout() {
 
 .search-bar {
   padding: 12px 16px;
-  background: #fff;
+  background: transparent;
 }
 
 .search-bar :deep(.van-search) {
-  background: #1a1a1a !important;
+  background: transparent;
   box-shadow: none;
   border: none;
+  padding: 0;
 }
 
 .search-bar :deep(.van-search__content) {
-  background: #333 !important;
+  background: #f5f5f5;
   box-shadow: none;
   border: none;
-}
-
-.search-bar :deep(.van-search__input) {
-  color: #fff !important;
-}
-
-.search-bar :deep(.van-search__input::placeholder) {
-  color: #999 !important;
-}
-
-.search-bar :deep(.van-icon-search) {
-  color: #fff !important;
 }
 
 .category-tabs {
@@ -240,18 +230,17 @@ async function handleLogout() {
 
 .category-tab {
   padding: 6px 14px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #f5f5f5;
   border-radius: 16px;
   font-size: 13px;
+  color: #666;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .category-tab.active {
-  background: #fff;
-  color: #1a1a1a;
-  border: 1px solid #1a1a1a;
+  background: #1a1a1a;
+  color: #fff;
 }
 
 .password-list {
