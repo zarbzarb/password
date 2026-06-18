@@ -10,6 +10,12 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/Register.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/home',
     name: 'Home',
     component: () => import('@/views/Home.vue'),
@@ -52,31 +58,23 @@ const router = createRouter({
   routes
 })
 
-// 全局初始化标志
 let isInitialized = false
 
 router.beforeEach(async (to, from, next) => {
   const settingsStore = useSettingsStore()
 
-  // 首次导航时初始化 Supabase 会话
   if (!isInitialized) {
     isInitialized = true
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const result = await settingsStore.checkSession()
-        if (result.hasSession) {
-          settingsStore.isLoggedIn = true
-        }
-      }
+      await settingsStore.checkSession()
     } catch (error) {
-      console.error('初始化会话失败:', error)
+      console.warn('初始化会话失败:', error)
     }
   }
 
   if (to.meta.requiresAuth && !settingsStore.isLoggedIn) {
     next('/')
-  } else if (to.path === '/' && settingsStore.isLoggedIn) {
+  } else if ((to.path === '/' || to.path === '/register') && settingsStore.isLoggedIn) {
     next('/home')
   } else {
     next()

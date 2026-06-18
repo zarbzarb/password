@@ -11,14 +11,32 @@
     </header>
 
     <div class="settings-content">
+      <div class="user-info">
+        <div class="user-avatar">{{ userInitial }}</div>
+        <div class="user-detail">
+          <div class="user-email">{{ userEmail }}</div>
+          <div class="user-status">已登录</div>
+        </div>
+      </div>
+
       <div class="section">
-        <div class="section-title">安全</div>
+        <div class="section-title">账号</div>
         <div class="setting-item" @click="showChangePassword = true">
-          <span>修改主密码</span>
+          <span>修改账号密码</span>
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="#999" stroke-width="2" fill="none">
             <path d="M9 18l6-6-6-6"/>
           </svg>
         </div>
+        <div class="setting-item" @click="handleLogout">
+          <span class="danger-text">退出登录</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="#999" stroke-width="2" fill="none">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">安全</div>
         <div class="setting-item">
           <span>自动锁定</span>
           <div class="setting-control">
@@ -26,7 +44,7 @@
           </div>
         </div>
         <div class="slider-container">
-          <input type="range" v-model="autoLockTime" min="1" max="30" class="slider" />
+          <input type="range" v-model.number="autoLockTime" min="1" max="30" class="slider" />
         </div>
       </div>
 
@@ -74,8 +92,6 @@
           </svg>
         </div>
       </div>
-
-      <button class="clear-btn" @click="handleClearData">清除所有数据</button>
     </div>
 
     <input ref="fileInput" type="file" accept=".json,.csv" style="display: none" @change="handleFileSelect" />
@@ -137,23 +153,25 @@
 
     <div v-if="showChangePassword" class="modal-overlay" @click="showChangePassword = false">
       <div class="modal-content" @click.stop>
-        <div class="modal-title">修改主密码</div>
+        <div class="modal-title">修改账号密码</div>
         <div class="input-group">
           <label>当前密码</label>
-          <input v-model="oldPassword" type="password" class="input" />
+          <input v-model="oldPassword" type="password" placeholder="输入当前密码" class="input" />
         </div>
         <div class="input-group">
           <label>新密码</label>
-          <input v-model="newPassword" type="password" class="input" />
+          <input v-model="newPassword" type="password" placeholder="至少6位" class="input" />
         </div>
         <div class="input-group">
           <label>确认新密码</label>
-          <input v-model="confirmPassword" type="password" class="input" />
+          <input v-model="confirmPassword" type="password" placeholder="再次输入新密码" class="input" />
         </div>
         <div v-if="passwordError" class="error">{{ passwordError }}</div>
         <div class="modal-actions">
           <button class="btn-cancel" @click="showChangePassword = false">取消</button>
-          <button class="btn-confirm" @click="handleChangePassword">确认</button>
+          <button class="btn-confirm" :disabled="settingsStore.loading" @click="handleChangePassword">
+            {{ settingsStore.loading ? '处理中...' : '确认' }}
+          </button>
         </div>
       </div>
     </div>
@@ -161,18 +179,18 @@
     <div v-if="showAbout" class="modal-overlay" @click="showAbout = false">
       <div class="modal-content about" @click.stop>
         <div class="modal-title">关于</div>
-        <p>密码管理器 v1.0.0</p>
+        <p>密码管理器 v2.0.0</p>
         <p>安全的云端密码管理工具</p>
         <p>数据存储在 Supabase 云端</p>
-        <p>采用 AES-256 加密保护</p>
-        <p>支持多设备同步</p>
+        <p>支持多设备同步访问</p>
+        <p>基于 Vue 3 + Vite 构建</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
 import { usePasswordStore } from '@/stores/password'
@@ -189,8 +207,8 @@ const showImportPreview = ref(false)
 const fileInput = ref(null)
 const importItems = ref([])
 
-const autoLockTime = ref(5)
-const categories = ref(['社交', '工作', '金融', '购物'])
+const autoLockTime = ref(settingsStore.autoLockTime)
+const categories = ref([...settingsStore.categories])
 const newCategory = ref('')
 
 const oldPassword = ref('')
@@ -198,9 +216,11 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordError = ref('')
 
-settingsStore.load()
-autoLockTime.value = settingsStore.autoLockTime
-categories.value = [...settingsStore.categories]
+const userEmail = computed(() => settingsStore.user?.email || '')
+const userInitial = computed(() => {
+  const email = settingsStore.user?.email || ''
+  return email.charAt(0).toUpperCase() || 'U'
+})
 
 watch(autoLockTime, (val) => {
   settingsStore.setAutoLockTime(val)
@@ -228,7 +248,7 @@ function handleExport(format) {
 
 async function handleImport(file) {
   try {
-    const result = await settingsStore.importDataFile(file, passwordStore.masterPassword)
+    const result = await settingsStore.importDataFile(file)
 
     if (result.type === 'json') {
       if (result.data.passwords && Array.isArray(result.data.passwords)) {
@@ -291,15 +311,15 @@ async function handleRemoveCategory(name) {
   }
 }
 
-function handleChangePassword() {
+async function handleChangePassword() {
   passwordError.value = ''
 
-  if (!settingsStore.verifyMasterPassword(oldPassword.value)) {
-    passwordError.value = '当前密码错误'
+  if (!oldPassword.value) {
+    passwordError.value = '请输入当前密码'
     return
   }
-  if (!newPassword.value || newPassword.value.length < 4) {
-    passwordError.value = '新密码至少4位'
+  if (!newPassword.value || newPassword.value.length < 6) {
+    passwordError.value = '新密码至少6位'
     return
   }
   if (newPassword.value !== confirmPassword.value) {
@@ -307,28 +327,28 @@ function handleChangePassword() {
     return
   }
 
-  settingsStore.setMasterPassword(newPassword.value)
-  passwordStore.setMasterPassword(newPassword.value)
-  passwordStore.saveAll()
-
-  oldPassword.value = ''
-  newPassword.value = ''
-  confirmPassword.value = ''
-  showChangePassword.value = false
-  showToast('已修改')
+  const result = await settingsStore.changePassword(oldPassword.value, newPassword.value)
+  if (result.success) {
+    oldPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    showChangePassword.value = false
+    showToast('密码已修改')
+  } else {
+    passwordError.value = result.error || '修改失败'
+  }
 }
 
-async function handleClearData() {
+async function handleLogout() {
   const result = await showConfirmDialog({
-    title: '清除数据',
-    message: '确定清除所有数据？此操作不可恢复。'
+    title: '退出登录',
+    message: '确定要退出登录吗？'
   })
   if (result) {
-    settingsStore.clearData()
-    passwordStore.items = []
-    passwordStore.masterPassword = ''
+    await settingsStore.logout()
+    passwordStore.clearAll()
     router.push('/')
-    showToast('已清除')
+    showToast('已退出登录')
   }
 }
 </script>
@@ -365,49 +385,75 @@ async function handleClearData() {
   color: #1a1a1a;
 }
 
-.settings-content {
+.user-info {
+  display: flex;
+  align-items: center;
   padding: 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.user-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 500;
+  margin-right: 16px;
+}
+
+.user-email {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.user-status {
+  font-size: 12px;
+  color: #22c55e;
+}
+
+.settings-content {
+  padding: 0 20px;
 }
 
 .section {
-  margin-bottom: 30px;
+  margin-top: 24px;
 }
 
 .section-title {
   font-size: 13px;
   color: #999;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  padding-left: 4px;
 }
 
 .setting-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   padding: 16px;
   background: #f8f8f8;
   border-radius: 10px;
   margin-bottom: 8px;
+  font-size: 15px;
+  color: #1a1a1a;
   cursor: pointer;
 }
 
-.setting-item span {
-  font-size: 15px;
-  color: #1a1a1a;
-}
-
-.import-tip {
-  font-size: 12px;
-  color: #999;
-  margin-left: 8px;
-}
-
-.setting-control span {
-  color: #666;
-  font-size: 14px;
+.danger-text {
+  color: #e53935;
 }
 
 .slider-container {
   padding: 8px 16px;
+  background: #f8f8f8;
+  border-radius: 10px;
 }
 
 .slider {
@@ -415,103 +461,105 @@ async function handleClearData() {
   height: 4px;
   background: #e5e5e5;
   border-radius: 2px;
-  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
 }
 
 .slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
   background: #1a1a1a;
-  border-radius: 8px;
   cursor: pointer;
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 14px;
+}
+
+.import-tip {
+  font-size: 12px;
+  color: #999;
+  margin-right: 8px;
 }
 
 .category-list {
   background: #f8f8f8;
   border-radius: 10px;
-  padding: 12px;
+  padding: 8px;
 }
 
 .category-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #eee;
+  justify-content: space-between;
+  padding: 12px 8px;
+  border-bottom: 1px solid #e5e5e5;
 }
 
 .category-item:last-of-type {
   border-bottom: none;
 }
 
-.category-item span {
-  font-size: 15px;
-  color: #1a1a1a;
-}
-
 .remove-btn {
   background: none;
   border: none;
-  padding: 4px;
   cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
 }
 
 .add-category {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  padding: 8px;
 }
 
 .category-input {
   flex: 1;
-  height: 40px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid #e5e5e5;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
+  background: #fff;
 }
 
 .add-btn {
-  padding: 10px 16px;
+  padding: 0 16px;
+  height: 36px;
   background: #1a1a1a;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
-}
-
-.clear-btn {
-  width: 100%;
-  height: 48px;
-  background: #fff;
-  color: #e53935;
-  border: 1px solid #e53935;
-  border-radius: 8px;
-  font-size: 15px;
-  cursor: pointer;
-  margin-top: 20px;
 }
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
   z-index: 100;
+  padding: 20px;
 }
 
 .modal-content {
-  width: 100%;
   background: #fff;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
   padding: 24px;
-  max-height: 70vh;
+  width: 100%;
+  max-width: 360px;
+  max-height: 80vh;
   overflow-y: auto;
 }
 
@@ -520,107 +568,7 @@ async function handleClearData() {
   font-weight: 500;
   color: #1a1a1a;
   margin-bottom: 20px;
-}
-
-.export-options {
-  margin-bottom: 16px;
-}
-
-.export-option {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: #f8f8f8;
-  border-radius: 10px;
-  margin-bottom: 10px;
-  cursor: pointer;
-}
-
-.export-option:hover {
-  background: #f0f0f0;
-}
-
-.export-icon {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1a1a1a;
-  color: #fff;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.export-info {
-  margin-left: 12px;
-  display: flex;
-  flex-direction: column;
-}
-
-.export-name {
-  font-size: 15px;
-  font-weight: 500;
-  color: #1a1a1a;
-}
-
-.export-desc {
-  font-size: 13px;
-  color: #999;
-  margin-top: 2px;
-}
-
-.import-preview .import-count {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 16px;
-}
-
-.preview-list {
-  background: #f8f8f8;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 16px;
-}
-
-.preview-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.preview-item:last-of-type {
-  border-bottom: none;
-}
-
-.preview-name {
-  font-size: 14px;
-  color: #1a1a1a;
-}
-
-.preview-user {
-  font-size: 13px;
-  color: #666;
-}
-
-.preview-more {
-  font-size: 13px;
-  color: #999;
   text-align: center;
-  padding-top: 8px;
-}
-
-.btn-cancel-full {
-  width: 100%;
-  height: 48px;
-  background: #f5f5f5;
-  color: #666;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  cursor: pointer;
 }
 
 .input-group {
@@ -631,16 +579,16 @@ async function handleClearData() {
   display: block;
   font-size: 13px;
   color: #666;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .input {
   width: 100%;
-  height: 48px;
-  padding: 0 16px;
+  height: 44px;
+  padding: 0 12px;
   border: 1px solid #e5e5e5;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .input:focus {
@@ -651,20 +599,24 @@ async function handleClearData() {
 .error {
   color: #e53935;
   font-size: 13px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  text-align: center;
 }
 
 .modal-actions {
   display: flex;
   gap: 12px;
+  margin-top: 16px;
 }
 
-.btn-cancel, .btn-confirm {
+.btn-cancel,
+.btn-confirm,
+.btn-cancel-full {
   flex: 1;
-  height: 48px;
+  height: 44px;
   border: none;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -678,10 +630,114 @@ async function handleClearData() {
   color: #fff;
 }
 
+.btn-confirm:disabled {
+  background: #ccc;
+}
+
+.btn-cancel-full {
+  width: 100%;
+  background: #f5f5f5;
+  color: #666;
+  margin-top: 12px;
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-option {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.export-icon {
+  width: 40px;
+  height: 40px;
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 12px;
+}
+
+.export-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-name {
+  font-size: 15px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.export-desc {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.import-count {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.preview-list {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #f8f8f8;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.preview-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 13px;
+}
+
+.preview-item:last-child {
+  border-bottom: none;
+}
+
+.preview-name {
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.preview-user {
+  color: #999;
+}
+
+.preview-more {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.about {
+  text-align: center;
+}
+
 .about p {
   font-size: 14px;
   color: #666;
-  line-height: 2;
-  text-align: center;
+  margin-bottom: 8px;
+  line-height: 1.6;
 }
 </style>

@@ -1,13 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { hashPassword } from '@/utils/crypto'
 import { 
   signUp, 
   signIn, 
   signOut, 
   getCurrentUser,
-  getProfile,
-  updateProfile,
+  getSession,
+  updatePassword as updateAuthPassword,
   ensureProfile,
   getSettings,
   updateSettings
@@ -20,32 +19,17 @@ export const useSettingsStore = defineStore('settings', () => {
   const autoLockTime = ref(5)
   const isLoggedIn = ref(false)
   const user = ref(null)
-  const masterPasswordHash = ref('')
   const loading = ref(false)
 
-  async function register(email, password, masterPassword) {
+  async function register(email, password) {
     loading.value = true
     try {
-      // 注册 Supabase 用户
       const data = await signUp(email, password)
       if (data.user) {
         user.value = data.user
-        
-        const hashedMasterPassword = hashPassword(masterPassword)
-        
-        await updateProfile(data.user.id, {
-          master_password_hash: hashedMasterPassword
-        })
-        masterPasswordHash.value = hashedMasterPassword
-        
-        const settings = await getSettings(data.user.id)
-        if (settings) {
-          categories.value = settings.categories || categories.value
-          autoLockTime.value = settings.auto_lock_time || 5
-        }
-        
+        await ensureProfile(data.user.id, email)
         isLoggedIn.value = true
-        saveSession(masterPassword)
+        saveSession()
         return { success: true, user: data.user }
       }
       return { success: false, error: '注册失败' }
@@ -57,35 +41,15 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function login(email, password, masterPassword) {
+  async function login(email, password) {
     loading.value = true
     try {
       const data = await signIn(email, password)
       if (data.user) {
         user.value = data.user
         
-        const profile = await ensureProfile(data.user.id, email)
+        await ensureProfile(data.user.id, email)
         
-        const hashedMasterPassword = hashPassword(masterPassword)
-        
-        if (profile && profile.master_password_hash && profile.master_password_hash.length > 0) {
-          if (profile.master_password_hash !== hashedMasterPassword) {
-            await signOut()
-            user.value = null
-            return { 
-              success: false, 
-              error: '主密码错误',
-              hint: '如忘记主密码，请在 Supabase profiles 表中清空 master_password_hash 字段后重新登录'
-            }
-          }
-        } else {
-          await updateProfile(data.user.id, {
-            master_password_hash: hashedMasterPassword
-          })
-        }
-        masterPasswordHash.value = hashedMasterPassword
-        
-        // 获取用户设置
         const settings = await getSettings(data.user.id)
         if (settings) {
           categories.value = settings.categories || categories.value
@@ -93,7 +57,7 @@ export const useSettingsStore = defineStore('settings', () => {
         }
         
         isLoggedIn.value = true
-        saveSession(masterPassword)
+        saveSession()
         return { success: true, user: data.user }
       }
       return { success: false, error: '登录失败' }
@@ -107,20 +71,23 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function checkSession() {
     try {
-      const currentUser = await getCurrentUser()
-      if (currentUser) {
-        user.value = currentUser
-        
-        const settings = await getSettings(currentUser.id)
-        if (settings) {
-          categories.value = settings.categories || categories.value
-          autoLockTime.value = settings.auto_lock_time || 5
-        }
-        
-        const localSession = getSession()
-        if (localSession) {
-          isLoggedIn.value = true
-          return { hasSession: true, user: currentUser }
+      const session = await getSession()
+      if (session) {
+        const currentUser = await getCurrentUser()
+        if (currentUser) {
+          user.value = currentUser
+          
+          const settings = await getSettings(currentUser.id)
+          if (settings) {
+            categories.value = settings.categories || categories.value
+            autoLockTime.value = settings.auto_lock_time || 5
+          }
+          
+          const localSession = getSession_()
+          if (localSession) {
+            isLoggedIn.value = true
+            return { hasSession: true, user: currentUser }
+          }
         }
       }
       return { hasSession: false }
@@ -136,21 +103,37 @@ export const useSettingsStore = defineStore('settings', () => {
       user.value = null
       isLoggedIn.value = false
       clearSession()
-      masterPasswordHash.value = ''
     } catch (error) {
       console.error('退出登录失败:', error)
     }
   }
 
-  function saveSession(masterPassword) {
+  async function changePassword(currentPassword, newPassword) {
+    loading.value = true
+    try {
+      const { error: signInError } = await signIn(user.value.email, currentPassword)
+      if (signInError) {
+        return { success: false, error: '当前密码错误' }
+      }
+      
+      await updateAuthPassword(newPassword)
+      return { success: true }
+    } catch (error) {
+      console.error('修改密码失败:', error)
+      return { success: false, error: error.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function saveSession() {
     const session = {
-      masterPassword,
       timestamp: Date.now()
     }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
   }
 
-  function getSession() {
+  function getSession_() {
     try {
       const session = sessionStorage.getItem(SESSION_KEY)
       if (session) {
@@ -201,24 +184,6 @@ export const useSettingsStore = defineStore('settings', () => {
         console.error('保存设置失败:', error)
       }
     }
-  }
-
-  async function updateMasterPassword(newMasterPassword) {
-    if (user.value) {
-      try {
-        const hashedMasterPassword = hashPassword(newMasterPassword)
-        await updateProfile(user.value.id, {
-          master_password_hash: hashedMasterPassword
-        })
-        masterPasswordHash.value = hashedMasterPassword
-        saveSession(newMasterPassword)
-        return { success: true }
-      } catch (error) {
-        console.error('更新主密码失败:', error)
-        return { success: false, error: error.message }
-      }
-    }
-    return { success: false, error: '用户未登录' }
   }
 
   function exportDataFile(format = 'json', passwordItems = []) {
@@ -416,20 +381,18 @@ export const useSettingsStore = defineStore('settings', () => {
     autoLockTime,
     isLoggedIn,
     user,
-    masterPasswordHash,
     loading,
     register,
     login,
     checkSession,
     logout,
     saveSession,
-    getSession,
     clearSession,
     addCategory,
     removeCategory,
     setAutoLockTime,
     saveSettings,
-    updateMasterPassword,
+    changePassword,
     exportDataFile,
     importDataFile
   }

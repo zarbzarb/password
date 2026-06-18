@@ -1,13 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { encrypt, decrypt } from '@/utils/crypto'
-import { getPasswords, createPassword, updatePassword, deletePassword, getPassword } from '@/utils/supabase'
+import { getPasswords, createPassword, updatePasswordEntry, deletePassword } from '@/utils/supabase'
 
 export const usePasswordStore = defineStore('password', () => {
   const items = ref([])
   const searchQuery = ref('')
   const selectedCategory = ref('')
-  const masterPassword = ref('')
   const userId = ref('')
   const loading = ref(false)
 
@@ -17,8 +15,8 @@ export const usePasswordStore = defineStore('password', () => {
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase()
       result = result.filter(item =>
-        item.website.toLowerCase().includes(query) ||
-        item.username.toLowerCase().includes(query)
+        (item.website || '').toLowerCase().includes(query) ||
+        (item.username || '').toLowerCase().includes(query)
       )
     }
 
@@ -26,17 +24,13 @@ export const usePasswordStore = defineStore('password', () => {
       result = result.filter(item => item.category === selectedCategory.value)
     }
 
-    return result.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    return result.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
   })
 
   const categories = computed(() => {
-    const cats = new Set(items.value.map(item => item.category))
+    const cats = new Set(items.value.map(item => item.category || '其他'))
     return Array.from(cats)
   })
-
-  function setMasterPassword(password) {
-    masterPassword.value = password
-  }
 
   function setUserId(id) {
     userId.value = id
@@ -48,15 +42,7 @@ export const usePasswordStore = defineStore('password', () => {
     loading.value = true
     try {
       const data = await getPasswords(userId.value)
-      if (data && masterPassword.value) {
-        // 解密所有密码
-        items.value = data.map(item => ({
-          ...item,
-          password: decryptPassword(item.password, masterPassword.value)
-        }))
-      } else {
-        items.value = data || []
-      }
+      items.value = data || []
     } catch (error) {
       console.error('加载密码失败:', error)
       items.value = []
@@ -65,52 +51,22 @@ export const usePasswordStore = defineStore('password', () => {
     }
   }
 
-  function decryptPassword(encryptedPassword, password) {
-    try {
-      // 如果密码已经是加密格式（对象），则解密
-      if (typeof encryptedPassword === 'object' && encryptedPassword.ciphertext) {
-        return decrypt(encryptedPassword, password)
-      }
-      // 如果是字符串，尝试解析后解密
-      if (typeof encryptedPassword === 'string') {
-        try {
-          const parsed = JSON.parse(encryptedPassword)
-          if (parsed.ciphertext) {
-            return decrypt(parsed, password)
-          }
-        } catch {
-          // 如果不是JSON，可能是明文（旧数据）
-          return encryptedPassword
-        }
-      }
-      return encryptedPassword
-    } catch {
-      return ''
-    }
-  }
-
   async function addItem(item) {
     if (!userId.value) return null
     
     loading.value = true
     try {
-      // 加密密码
-      const encryptedPassword = encrypt(item.password, masterPassword.value)
-      
       const newItem = await createPassword(userId.value, {
         website: item.website,
         url: item.url || '',
         username: item.username,
-        password: JSON.stringify(encryptedPassword),
+        password: item.password,
         category: item.category || '其他',
         notes: item.notes || ''
       })
       
       if (newItem) {
-        items.value.unshift({
-          ...newItem,
-          password: item.password // 本地保存明文用于显示
-        })
+        items.value.unshift(newItem)
       }
       return newItem
     } catch (error) {
@@ -128,23 +84,17 @@ export const usePasswordStore = defineStore('password', () => {
     try {
       const index = items.value.findIndex(i => i.id === id)
       if (index !== -1) {
-        // 加密密码
-        const encryptedPassword = encrypt(item.password, masterPassword.value)
-        
-        const updatedItem = await updatePassword(id, {
+        const updatedItem = await updatePasswordEntry(id, {
           website: item.website,
           url: item.url || '',
           username: item.username,
-          password: JSON.stringify(encryptedPassword),
+          password: item.password,
           category: item.category || '其他',
           notes: item.notes || ''
         })
         
         if (updatedItem) {
-          items.value[index] = {
-            ...updatedItem,
-            password: item.password // 本地保存明文用于显示
-          }
+          items.value[index] = updatedItem
         }
       }
     } catch (error) {
@@ -187,16 +137,19 @@ export const usePasswordStore = defineStore('password', () => {
     selectedCategory.value = ''
   }
 
+  function clearAll() {
+    items.value = []
+    userId.value = ''
+  }
+
   return {
     items,
     searchQuery,
     selectedCategory,
-    masterPassword,
     userId,
     loading,
     filteredItems,
     categories,
-    setMasterPassword,
     setUserId,
     loadAll,
     addItem,
@@ -205,6 +158,7 @@ export const usePasswordStore = defineStore('password', () => {
     getItem,
     setSearchQuery,
     setSelectedCategory,
-    clearSearch
+    clearSearch,
+    clearAll
   }
 })

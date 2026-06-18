@@ -45,6 +45,14 @@ export async function getSession() {
   return session
 }
 
+export async function updatePassword(newPassword) {
+  const { data, error } = await supabase.auth.updateUser({
+    password: newPassword
+  })
+  if (error) throw error
+  return data
+}
+
 // 用户配置相关
 export async function getProfile(userId) {
   const { data, error } = await supabase
@@ -64,8 +72,7 @@ export async function ensureProfile(userId, email) {
     .from('profiles')
     .upsert({
       id: userId,
-      email: email,
-      master_password_hash: ''
+      email: email
     }, { onConflict: 'id' })
     .select()
     .single()
@@ -78,20 +85,6 @@ export async function updateProfile(userId, updates) {
     .from('profiles')
     .update(updates)
     .eq('id', userId)
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
-export async function createProfile(userId, email, masterPasswordHash) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .insert({
-      id: userId,
-      email,
-      master_password_hash: masterPasswordHash
-    })
     .select()
     .single()
   if (error) throw error
@@ -137,7 +130,7 @@ export async function createPassword(userId, passwordData) {
   return data
 }
 
-export async function updatePassword(id, updates) {
+export async function updatePasswordEntry(id, updates) {
   const { data, error } = await supabase
     .from('passwords')
     .update(updates)
@@ -162,7 +155,7 @@ export async function getSettings(userId) {
     .from('user_settings')
     .select('*')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }
