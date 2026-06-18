@@ -82,11 +82,11 @@
 
         <div class="info-item time">
           <label>创建时间</label>
-          <span>{{ formatDate(item.createdAt) }}</span>
+          <span>{{ formatDate(item.created_at) }}</span>
         </div>
         <div class="info-item time">
           <label>更新时间</label>
-          <span>{{ formatDate(item.updatedAt) }}</span>
+          <span>{{ formatDate(item.updated_at) }}</span>
         </div>
       </div>
 
