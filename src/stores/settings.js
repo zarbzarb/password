@@ -32,13 +32,18 @@ export const useSettingsStore = defineStore('settings', () => {
       if (data.user) {
         user.value = data.user
         
-        // 创建用户配置（存储主密码哈希）
         const hashedMasterPassword = hashPassword(masterPassword)
-        await createProfile(data.user.id, email, hashedMasterPassword)
+        
+        await updateProfile(data.user.id, {
+          master_password_hash: hashedMasterPassword
+        })
         masterPasswordHash.value = hashedMasterPassword
         
-        // 创建用户设置
-        await createSettings(data.user.id)
+        const settings = await getSettings(data.user.id)
+        if (settings) {
+          categories.value = settings.categories || categories.value
+          autoLockTime.value = settings.auto_lock_time || 5
+        }
         
         isLoggedIn.value = true
         saveSession(masterPassword)
